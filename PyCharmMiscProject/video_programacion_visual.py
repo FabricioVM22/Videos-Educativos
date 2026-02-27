@@ -530,7 +530,7 @@ class ProgramacionVisual(Scene):
             concepts = VGroup()
 
             # Concepto 1: Condicionales (arriba-izquierda)
-            cond_icon = Diamond(color=C_ACCENT).set_fill(C_ACCENT, 0.3).set_stroke(C_ACCENT, 2)
+            cond_icon = Polygon(UP * 0.4, RIGHT * 0.6, DOWN * 0.4, LEFT * 0.6).set_fill(C_ACCENT, 0.3).set_stroke(C_ACCENT, 2)
             cond_text = Text("Condicionales", font_size=30, color=C_TEXT, weight=BOLD)
             cond_desc = Text("Decisiones y bifurcaciones", font_size=24, color=C_TEXT_DIM)
             cond_group = VGroup(cond_icon, cond_text, cond_desc).arrange(DOWN, buff=0.25)
