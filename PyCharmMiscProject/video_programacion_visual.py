@@ -22,52 +22,108 @@ class ProgramacionVisual(Scene):
         C_PURPLE = "#A78BFA"
 
         # ========================================
-        # MÁRGENES SEGUROS (50/50 estricto)
+        # LAYOUT RESPONSIVE (SAFE AREA + COLUMNAS)
         # ========================================
-        SAFE_MARGIN_LEFT = 1.2
-        SAFE_MARGIN_RIGHT = 1.2
-        SAFE_MARGIN_TOP = 1.5
-        SAFE_MARGIN_BOTTOM = 1.2
+        FW = config.frame_width
+        FH = config.frame_height
 
-        CENTER_X = 0.0
-        LEFT_COLUMN_CENTER = -3.5
-        RIGHT_COLUMN_CENTER = 3.5
-        COLUMN_WIDTH = 6.5
+        SAFE_MARGIN_X = 0.85
+        SAFE_MARGIN_Y = 0.65
+
+        safe = Rectangle(
+            width=FW - 2 * SAFE_MARGIN_X,
+            height=FH - 2 * SAFE_MARGIN_Y,
+        ).move_to(ORIGIN)
+
+        left_area = Rectangle(width=safe.width / 2, height=safe.height).move_to(
+            safe.get_left() + RIGHT * (safe.width / 4)
+        )
+        right_area = Rectangle(width=safe.width / 2, height=safe.height).move_to(
+            safe.get_right() + LEFT * (safe.width / 4)
+        )
+
+        def anchor_in(area: Mobject, mob: Mobject, x: float, y: float, *, align_edge=ORIGIN) -> Mobject:
+            """
+            Posiciona mob dentro de 'area' usando coords normalizadas:
+              x: 0..1 (izq->der), y: 0..1 (abajo->arriba)
+            """
+            x = np.clip(x, 0.0, 1.0)
+            y = np.clip(y, 0.0, 1.0)
+            target = area.get_corner(DL) + RIGHT * (area.width * x) + UP * (area.height * y)
+
+            if align_edge is ORIGIN:
+                mob.move_to(target)
+                return mob
+
+            if align_edge is UL:
+                mob.move_to(target, aligned_edge=UL)
+            elif align_edge is UR:
+                mob.move_to(target, aligned_edge=UR)
+            elif align_edge is DL:
+                mob.move_to(target, aligned_edge=DL)
+            elif align_edge is DR:
+                mob.move_to(target, aligned_edge=DR)
+            else:
+                mob.move_to(target)
+            return mob
+
+        def clamp_to_area(area: Mobject, group: Mobject, padding: float = 0.08) -> Mobject:
+            """Asegura que 'group' quede completamente dentro de 'area' (con padding)."""
+            left_bound = area.get_left()[0] + padding
+            right_bound = area.get_right()[0] - padding
+            bottom_bound = area.get_bottom()[1] + padding
+            top_bound = area.get_top()[1] - padding
+
+            dx = 0.0
+            dy = 0.0
+
+            if group.get_left()[0] < left_bound:
+                dx = left_bound - group.get_left()[0]
+            if group.get_right()[0] > right_bound:
+                dx = right_bound - group.get_right()[0]
+
+            if group.get_bottom()[1] < bottom_bound:
+                dy = bottom_bound - group.get_bottom()[1]
+            if group.get_top()[1] > top_bound:
+                dy = top_bound - group.get_top()[1]
+
+            group.shift(RIGHT * dx + UP * dy)
+            return group
 
         # ========================================
-        # FONDO
+        # FONDO (RESPONSIVE)
         # ========================================
-        bg = Rectangle(width=16, height=9).set_fill(C_BG, 1).set_stroke(width=0)
+        bg = Rectangle(width=FW, height=FH).set_fill(C_BG, 1).set_stroke(width=0)
         self.add(bg)
 
-        # Línea divisoria sutil (50/50)
-        divider = Line(UP * 4.5, DOWN * 4.5).set_stroke(C_TEXT_DIM, 1, 0.03)
+        divider = Line(safe.get_top(), safe.get_bottom()).set_stroke(C_TEXT_DIM, 1, 0.03)
         self.add(divider)
 
         # ========================================
-        # FUNCIONES AUXILIARES (corregidas)
+        # FUNCIONES AUXILIARES (RESPONSIVE)
         # ========================================
 
         def make_title(text: str) -> Text:
-            """Título en esquina superior IZQUIERDA"""
+            """Título anclado a la esquina superior izquierda del SAFE AREA."""
             t = Text(text, font_size=36, weight=BOLD, color=C_TEXT)
-            t.set_max_width(7.0)
-            t.to_corner(UL).shift(RIGHT * SAFE_MARGIN_LEFT + DOWN * SAFE_MARGIN_TOP * 0.5)
+            t.set_max_width(left_area.width * 0.96)
+            anchor_in(left_area, t, 0.02, 0.98, align_edge=UL).shift(DOWN * 0.02 + RIGHT * 0.02)
             return t
 
         def make_subtitle(text: str) -> Text:
-            """Subtítulo debajo del título (izquierda)"""
+            """Subtítulo debajo del título (en la columna izquierda)."""
             s = Text(text, font_size=20, color=C_TEXT_DIM)
-            s.set_max_width(7.0)
-            s.to_corner(UL).shift(RIGHT * SAFE_MARGIN_LEFT + DOWN * SAFE_MARGIN_TOP * 0.5 + DOWN * 0.5)
+            s.set_max_width(left_area.width * 0.96)
+            anchor_in(left_area, s, 0.02, 0.90, align_edge=UL).shift(DOWN * 0.02 + RIGHT * 0.02)
             return s
 
-        def make_card(content: Mobject, color: str = C_SURFACE, max_width: float = 6.0, position=None) -> VGroup:
-            """Tarjeta con límites estrictos"""
+        def make_card(content: Mobject, color: str = C_SURFACE, max_width: float | None = None, position=None) -> VGroup:
+            """Tarjeta con límites estrictos (max_width opcional)."""
             padding_x = 0.5
             padding_y = 0.35
 
-            content.set_max_width(max_width - 2 * padding_x)
+            if max_width is not None:
+                content.set_max_width(max_width - 2 * padding_x)
 
             card_rect = RoundedRectangle(
                 corner_radius=0.1,
@@ -83,14 +139,14 @@ class ProgramacionVisual(Scene):
             shadow.z_index = -1
 
             card = VGroup(shadow, card_rect, content)
-            if position:
+            if position is not None:
                 card.move_to(position)
             return card
 
         def make_box(text: str, width: float = 2.2, height: float = 0.65,
                      color: str = C_SURFACE_2, stroke_color: str = C_TEXT,
                      font_size: int = 20) -> VGroup:
-            """Caja de proceso (más pequeña)"""
+            """Caja de proceso."""
             box = RoundedRectangle(corner_radius=0.08, width=width, height=height)
             box.set_fill(color, 1).set_stroke(stroke_color, 1.2, 0.4)
             txt = Text(text, font_size=font_size, color=C_TEXT)
@@ -98,48 +154,30 @@ class ProgramacionVisual(Scene):
             return VGroup(box, txt)
 
         def make_arrow(start, end, color: str = C_TEXT_DIM, stroke_width: int = 3) -> Arrow:
-            """Flecha más delgada"""
+            """Flecha."""
             return Arrow(start, end, buff=0.1, stroke_width=stroke_width,
                          color=color, tip_length=0.15)
 
         def make_token(color: str = C_WARNING) -> Dot:
-            """Token más pequeño"""
+            """Token."""
             return Dot(radius=0.08, color=color).set_stroke(WHITE, 1.2)
 
         def make_explanation_card(text: str) -> VGroup:
-            """Tarjeta de explicación (columna derecha)"""
+            """Tarjeta de explicación anclada a la columna derecha (responsive)."""
             explanation = Text(text, font_size=18, color=C_TEXT, line_spacing=1.35)
-            explanation.set_max_width(5.5)
-            card = make_card(explanation, C_SURFACE, max_width=6.2)
-            card.move_to(RIGHT * RIGHT_COLUMN_CENTER)
+            explanation.set_max_width(right_area.width * 0.92)
+            card = make_card(explanation, C_SURFACE, max_width=right_area.width * 0.96)
+            anchor_in(right_area, card, 0.50, 0.52, align_edge=ORIGIN)
             return card
 
-        def constrain_to_left_column(group: VGroup) -> VGroup:
-            """Asegura que nada cruce el centro hacia la derecha"""
-            max_x = CENTER_X - 0.6
-            current_right = group.get_right()[0]
-            if current_right > max_x:
-                group.shift(LEFT * (current_right - max_x))
-            min_x = -8 + SAFE_MARGIN_LEFT
-            current_left = group.get_left()[0]
-            if current_left < min_x:
-                group.shift(RIGHT * (min_x - current_left))
-            return group
+        def constrain_to_left_column(group: Mobject) -> Mobject:
+            return clamp_to_area(left_area, group, padding=0.10)
 
-        def constrain_to_right_column(group: VGroup) -> VGroup:
-            """Asegura que nada cruce el centro hacia la izquierda"""
-            min_x = CENTER_X + 0.6
-            current_left = group.get_left()[0]
-            if current_left < min_x:
-                group.shift(RIGHT * (min_x - current_left))
-            max_x = 8 - SAFE_MARGIN_RIGHT
-            current_right = group.get_right()[0]
-            if current_right > max_x:
-                group.shift(LEFT * (current_right - max_x))
-            return group
+        def constrain_to_right_column(group: Mobject) -> Mobject:
+            return clamp_to_area(right_area, group, padding=0.10)
 
         # ========================================
-        # INTRODUCCIÓN
+        # INTRODUCCIÓN (RESPONSIVE)
         # ========================================
 
         main_title = Text("Lógica de Programación", font_size=48, weight=BOLD, color=C_TEXT)
@@ -166,39 +204,42 @@ class ProgramacionVisual(Scene):
             self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.0)
             self.wait(0.4)
 
-            # === COLUMNA IZQUIERDA: DIAGRAMA ===
+            # === COLUMNA IZQUIERDA: DIAGRAMA (RESPONSIVE + FLECHAS ALWAYS_REDRAW) ===
             start_box = make_box("Inicio", width=1.8, height=0.6)
-            start_box.move_to(LEFT * 6.0)
+            anchor_in(left_area, start_box, 0.18, 0.55)
 
             token = make_token()
             token.move_to(start_box.get_center())
 
             decision = Polygon(UP * 0.8, RIGHT * 1.1, DOWN * 0.8, LEFT * 1.1)
             decision.set_fill(C_SURFACE, 1).set_stroke(C_ACCENT, 2, 0.8)
-            decision.move_to(LEFT * 2.8)
+            anchor_in(left_area, decision, 0.52, 0.55)
 
             decision_text = Text("¿Condición?", font_size=19, color=C_TEXT)
             decision_text.move_to(decision)
 
             true_box = make_box("Ejecutar A", width=2.0, height=0.6,
                                 color="#064E3B", stroke_color=C_SUCCESS)
-            true_box.move_to(RIGHT * 0.2 + UP * 1.4)
+            anchor_in(left_area, true_box, 0.82, 0.72)
 
             false_box = make_box("Ejecutar B", width=2.0, height=0.6,
                                  color="#450A0A", stroke_color=C_ERROR)
-            false_box.move_to(RIGHT * 0.2 + DOWN * 1.4)
+            anchor_in(left_area, false_box, 0.82, 0.38)
 
-            arrow_start = make_arrow(start_box.get_right(), decision.get_left(), color=C_TEXT_DIM)
-            arrow_true = make_arrow(decision.get_corner(UR) + RIGHT * 0.05, true_box.get_left(),
-                                    color=C_SUCCESS, stroke_width=3)
-            arrow_false = make_arrow(decision.get_corner(DR) + RIGHT * 0.05, false_box.get_left(),
-                                     color=C_ERROR, stroke_width=3)
+            arrow_start = always_redraw(
+                lambda: make_arrow(start_box.get_right(), decision.get_left(), color=C_TEXT_DIM)
+            )
+            arrow_true = always_redraw(
+                lambda: make_arrow(decision.get_corner(UR) + RIGHT * 0.05, true_box.get_left(),
+                                   color=C_SUCCESS, stroke_width=3)
+            )
+            arrow_false = always_redraw(
+                lambda: make_arrow(decision.get_corner(DR) + RIGHT * 0.05, false_box.get_left(),
+                                   color=C_ERROR, stroke_width=3)
+            )
 
-            label_true = Text("SÍ", font_size=16, color=C_SUCCESS, weight=BOLD)
-            label_true.next_to(arrow_true, UP, buff=0.06)
-
-            label_false = Text("NO", font_size=16, color=C_ERROR, weight=BOLD)
-            label_false.next_to(arrow_false, DOWN, buff=0.06)
+            label_true = always_redraw(lambda: Text("SÍ", font_size=16, color=C_SUCCESS, weight=BOLD).next_to(arrow_true, UP, buff=0.06))
+            label_false = always_redraw(lambda: Text("NO", font_size=16, color=C_ERROR, weight=BOLD).next_to(arrow_false, DOWN, buff=0.06))
 
             diagram = VGroup(
                 start_box, token, decision, decision_text,
@@ -206,18 +247,14 @@ class ProgramacionVisual(Scene):
                 arrow_start, arrow_true, arrow_false,
                 label_true, label_false
             )
-
             diagram = constrain_to_left_column(diagram)
 
-            # === COLUMNA DERECHA: EXPLICACIÓN ===
             explanation_card = make_explanation_card(
                 "Una condición divide el flujo en caminos exclusivos.\n\n"
                 "Solo UN camino se ejecuta en cada evaluación."
             )
-
             explanation_card = constrain_to_right_column(explanation_card)
 
-            # Animación
             self.play(FadeIn(start_box), FadeIn(token), run_time=0.6)
             self.play(Create(arrow_start), run_time=0.5)
             self.play(FadeIn(decision), FadeIn(decision_text), run_time=0.6)
@@ -253,36 +290,32 @@ class ProgramacionVisual(Scene):
             self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.0)
             self.wait(0.4)
 
-            # === COLUMNA IZQUIERDA: DIAGRAMA ===
             steps = VGroup()
             step_labels = ["Entrada", "Procesamiento", "Validación"]
 
             for i, label in enumerate(step_labels):
                 step = make_box(label, width=2.6, height=0.6)
-                step.move_to(LEFT * 5.2 + DOWN * (i * 1.3))
+                anchor_in(left_area, step, 0.25, 0.70 - i * 0.20)
                 steps.add(step)
 
             exit_box = make_box("⚠ Salida", width=2.2, height=0.6,
                                 color="#7F1D1D", stroke_color=C_ERROR)
-            exit_box.move_to(RIGHT * 0.3 + DOWN * 1.3)
+            anchor_in(left_area, exit_box, 0.74, 0.50)
 
-            arrow_1 = make_arrow(steps[0].get_bottom(), steps[1].get_top(), color=C_TEXT_DIM, stroke_width=3)
-            arrow_2 = make_arrow(steps[1].get_bottom(), steps[2].get_top(), color=C_TEXT_DIM, stroke_width=3)
-            arrow_exit = make_arrow(steps[1].get_right(), exit_box.get_left(), color=C_ERROR, stroke_width=3)
+            arrow_1 = always_redraw(lambda: make_arrow(steps[0].get_bottom(), steps[1].get_top(), color=C_TEXT_DIM, stroke_width=3))
+            arrow_2 = always_redraw(lambda: make_arrow(steps[1].get_bottom(), steps[2].get_top(), color=C_TEXT_DIM, stroke_width=3))
+            arrow_exit = always_redraw(lambda: make_arrow(steps[1].get_right(), exit_box.get_left(), color=C_ERROR, stroke_width=3))
 
             token = make_token()
             token.move_to(steps[0].get_center())
 
             diagram = VGroup(steps, exit_box, arrow_1, arrow_2, arrow_exit, token)
-
             diagram = constrain_to_left_column(diagram)
 
-            # === COLUMNA DERECHA: EXPLICACIÓN ===
             explanation_card = make_explanation_card(
                 "El flujo sigue un orden definido, pero puede interruptirse ante condiciones excepcionales.\n\n"
                 "Esto permite manejar errores o casos especiales."
             )
-
             explanation_card = constrain_to_right_column(explanation_card)
 
             self.play(FadeIn(steps, shift=RIGHT * 0.2), run_time=0.8)
@@ -543,8 +576,8 @@ class ProgramacionVisual(Scene):
                 font_size=19, color=C_TEXT, line_spacing=1.4, weight=BOLD
             )
             closing_card = make_card(closing, C_SURFACE, max_width=6.2)
-            closing_card.move_to(RIGHT * RIGHT_COLUMN_CENTER)
 
+            anchor_in(right_area, closing_card, 0.50, 0.52)
             closing_card = constrain_to_right_column(closing_card)
 
             self.play(FadeIn(cond_card, shift=UP * 0.2), run_time=0.6)
