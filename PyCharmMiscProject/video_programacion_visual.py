@@ -1,605 +1,924 @@
 from manim import *
-
-config.pixel_width = 1920
-config.pixel_height = 1080
-config.frame_rate = 15
+import numpy as np
 
 
-class ProgramacionVisual(Scene):
-    def construct(self):
-        # ========================================
-        # PALETA DE COLORES (corregida)
-        # ========================================
-        C_BG = "#0B0F19"
-        C_SURFACE = "#1E293B"
-        C_SURFACE_2 = "#334155"
-        C_TEXT = "#F8FAFC"
-        C_TEXT_DIM = "#94A3B8"
-        C_ACCENT = "#38BDF8"
-        C_SUCCESS = "#4ADE80"
-        C_WARNING = "#FBBF24"
-        C_ERROR = "#F87171"
-        C_PURPLE = "#A78BFA"
+# ==========================================
+# 1. DESIGN SYSTEM (Configuración Centralizada)
+# ==========================================
+class StyleConfig:
+    # Colores Semánticos
+    BG = "#0B0F19"
+    SURFACE = "#1E293B"
+    SURFACE_2 = "#334155"
+    SURFACE_3 = "#475569"
+    TEXT = "#F8FAFC"
+    TEXT_DIM = "#94A3B8"
+    ACCENT = "#38BDF8"
+    SUCCESS = "#4ADE80"
+    WARNING = "#FBBF24"
+    ERROR = "#F87171"
+    PURPLE = "#A78BFA"
+    ORANGE = "#FB923C"
+    PINK = "#F472B6"
 
-        # ========================================
-        # LAYOUT RESPONSIVE (SAFE AREA + COLUMNAS)
-        # ========================================
-        FW = config.frame_width
-        FH = config.frame_height
+    # Espaciado Relativo
+    PADDING_SM = 0.2
+    PADDING_MD = 0.4
+    PADDING_LG = 0.8
 
-        SAFE_MARGIN_X = 0.85
-        SAFE_MARGIN_Y = 0.65
+    @staticmethod
+    def get_font_size(base_ratio=0.05):
+        """Tamaño de fuente escalable según resolución"""
+        # Cambiamos frame_height por pixel_height
+        return config.pixel_height * base_ratio
 
-        safe = Rectangle(
-            width=FW - 2 * SAFE_MARGIN_X,
-            height=FH - 2 * SAFE_MARGIN_Y,
+
+# ==========================================
+# 2. LAYOUT ENGINE (Sistema de Grilla Responsive)
+# ==========================================
+class ResponsiveLayout:
+    def __init__(self):
+        self.frame_w = config.frame_width
+        self.frame_h = config.frame_height
+
+        # Márgenes de seguridad (10% del frame)
+        self.margin_x = self.frame_w * 0.1
+        self.margin_y = self.frame_h * 0.1
+
+        # Área útil
+        self.safe_area = Rectangle(
+            width=self.frame_w - 2 * self.margin_x,
+            height=self.frame_h - 2 * self.margin_y
         ).move_to(ORIGIN)
 
-        left_area = Rectangle(width=safe.width / 2, height=safe.height).move_to(
-            safe.get_left() + RIGHT * (safe.width / 4)
+        # División 50/50 para columnas
+        self.col_width = self.safe_area.width / 2
+        self.col_height = self.safe_area.height
+
+        self.left_col = Rectangle(
+            width=self.col_width, height=self.col_height
+        ).move_to(self.safe_area.get_center() + LEFT * self.col_width / 2)
+
+        self.right_col = Rectangle(
+            width=self.col_width, height=self.col_height
+        ).move_to(self.safe_area.get_center() + RIGHT * self.col_width / 2)
+
+    def get_pos(self, column: str, x: float, y: float):
+        """Posición normalizada (0-1) dentro de una columna"""
+        col = self.left_col if column == "left" else self.right_col
+        return col.get_corner(DL) + RIGHT * (col.width * x) + UP * (col.height * y)
+
+
+# ==========================================
+# 3. COMPONENTES UI (Reutilizables)
+# ==========================================
+class Card(VGroup):
+    """Tarjeta con sombra y bordes redondeados"""
+
+    def __init__(self, content, color=StyleConfig.SURFACE, **kwargs):
+        super().__init__(**kwargs)
+        padding = StyleConfig.PADDING_MD
+
+        bg = RoundedRectangle(
+            corner_radius=0.1,
+            width=content.width + 2 * padding,
+            height=content.height + 2 * padding
         )
-        right_area = Rectangle(width=safe.width / 2, height=safe.height).move_to(
-            safe.get_right() + LEFT * (safe.width / 4)
+        bg.set_fill(color, 0.95).set_stroke(StyleConfig.TEXT, 1, 0.1)
+
+        shadow = bg.copy().set_fill(BLACK, 0.3).set_stroke(width=0)
+        shadow.shift(DOWN * 0.05 + RIGHT * 0.05)
+        shadow.z_index = -1
+
+        self.add(shadow, bg, content)
+        self.move_to(content)
+
+
+class Node(VGroup):
+    """Nodo de proceso rectangular"""
+
+    def __init__(self, text, layout, color=StyleConfig.SURFACE_2,
+                 width_ratio=0.25, height_ratio=0.06, **kwargs):
+        super().__init__(**kwargs)
+
+        w = layout.col_width * width_ratio
+        h = layout.col_height * height_ratio
+
+        box = RoundedRectangle(corner_radius=0.08, width=w, height=h)
+        box.set_fill(color, 1).set_stroke(StyleConfig.TEXT, 1.2, 0.4)
+
+        fs = StyleConfig.get_font_size(0.022)
+        txt = Text(text, font_size=fs, color=StyleConfig.TEXT)
+        txt.move_to(box)
+
+        self.add(box, txt)
+
+
+class DecisionNode(VGroup):
+    """Nodo de decisión (rombo)"""
+
+    def __init__(self, text, layout, color=StyleConfig.SURFACE, **kwargs):
+        super().__init__(**kwargs)
+
+        size = layout.col_width * 0.25
+
+        diamond = Polygon(
+            UP * size * 0.6, RIGHT * size * 0.8,
+            DOWN * size * 0.6, LEFT * size * 0.8
+        )
+        diamond.set_fill(color, 1).set_stroke(StyleConfig.ACCENT, 2, 0.8)
+
+        fs = StyleConfig.get_font_size(0.02)
+        txt = Text(text, font_size=fs, color=StyleConfig.TEXT)
+        txt.move_to(diamond)
+
+        self.add(diamond, txt)
+
+
+class LoopNode(VGroup):
+    """Nodo de ciclo (hexágono)"""
+
+    def __init__(self, text, layout, color=StyleConfig.SURFACE, **kwargs):
+        super().__init__(**kwargs)
+
+        w = layout.col_width * 0.3
+        h = layout.col_height * 0.08
+
+        hexagon = RegularPolygon(n=6, radius=w / 2)
+        hexagon.set_fill(color, 1).set_stroke(StyleConfig.WARNING, 2, 0.8)
+        hexagon.stretch_to_fit_width(w)
+        hexagon.stretch_to_fit_height(h)
+
+        fs = StyleConfig.get_font_size(0.022)
+        txt = Text(text, font_size=fs, color=StyleConfig.TEXT)
+        txt.move_to(hexagon)
+
+        self.add(hexagon, txt)
+
+
+class Connection(Arrow):
+    """Flecha de conexión entre nodos"""
+
+    def __init__(self, start, end, color=StyleConfig.TEXT_DIM, **kwargs):
+        super().__init__(
+            start.get_right(), end.get_left(),
+            buff=0.15, stroke_width=3, color=color,
+            tip_length=0.15, **kwargs
         )
 
-        def anchor_in(area: Mobject, mob: Mobject, x: float, y: float, *, align_edge=ORIGIN) -> Mobject:
-            """
-            Posiciona mob dentro de 'area' usando coords normalizadas:
-              x: 0..1 (izq->der), y: 0..1 (abajo->arriba)
-            """
-            x = np.clip(x, 0.0, 1.0)
-            y = np.clip(y, 0.0, 1.0)
-            target = area.get_corner(DL) + RIGHT * (area.width * x) + UP * (area.height * y)
 
-            if align_edge is ORIGIN:
-                mob.move_to(target)
-                return mob
+class FlowToken(Dot):
+    """Token que representa el flujo de ejecución"""
 
-            if align_edge is UL:
-                mob.move_to(target, aligned_edge=UL)
-            elif align_edge is UR:
-                mob.move_to(target, aligned_edge=UR)
-            elif align_edge is DL:
-                mob.move_to(target, aligned_edge=DL)
-            elif align_edge is DR:
-                mob.move_to(target, aligned_edge=DR)
-            else:
-                mob.move_to(target)
-            return mob
+    def __init__(self, color=StyleConfig.WARNING):
+        super().__init__(radius=0.12, color=color)
+        self.set_stroke(WHITE, 1.5)
 
-        def clamp_to_area(area: Mobject, group: Mobject, padding: float = 0.08) -> Mobject:
-            """Asegura que 'group' quede completamente dentro de 'area' (con padding)."""
-            left_bound = area.get_left()[0] + padding
-            right_bound = area.get_right()[0] - padding
-            bottom_bound = area.get_bottom()[1] + padding
-            top_bound = area.get_top()[1] - padding
 
-            dx = 0.0
-            dy = 0.0
+# ==========================================
+# 4. ESCENA PRINCIPAL
+# ==========================================
+class LogicaDeProgramacionVisual(Scene):
+    def construct(self):
+        # Inicializar sistema
+        self.layout = ResponsiveLayout()
 
-            if group.get_left()[0] < left_bound:
-                dx = left_bound - group.get_left()[0]
-            if group.get_right()[0] > right_bound:
-                dx = right_bound - group.get_right()[0]
-
-            if group.get_bottom()[1] < bottom_bound:
-                dy = bottom_bound - group.get_bottom()[1]
-            if group.get_top()[1] > top_bound:
-                dy = top_bound - group.get_top()[1]
-
-            group.shift(RIGHT * dx + UP * dy)
-            return group
-
-        # ========================================
-        # FONDO (RESPONSIVE)
-        # ========================================
-        bg = Rectangle(width=FW, height=FH).set_fill(C_BG, 1).set_stroke(width=0)
+        # Fondo
+        bg = Rectangle(width=config.frame_width, height=config.frame_height)
+        bg.set_fill(StyleConfig.BG, 1).set_stroke(width=0)
         self.add(bg)
 
-        divider = Line(safe.get_top(), safe.get_bottom()).set_stroke(C_TEXT_DIM, 1, 0.03)
+        # Línea divisoria
+        divider = Line(
+            self.layout.safe_area.get_top(),
+            self.layout.safe_area.get_bottom()
+        )
+        divider.set_stroke(StyleConfig.TEXT_DIM, 1, 0.03)
         self.add(divider)
 
-        # ========================================
-        # FUNCIONES AUXILIARES (RESPONSIVE)
-        # ========================================
+        # Ejecutar secciones
+        self.intro()
+        self.section_sequential()
+        self.section_conditionals()
+        self.section_loops()
+        self.section_functions()
+        self.section_data_flow()
+        self.summary()
+        self.end_screen()
 
-        def make_title(text: str) -> Text:
-            """Título anclado a la esquina superior izquierda del SAFE AREA."""
-            t = Text(text, font_size=36, weight=BOLD, color=C_TEXT)
-            t.set_max_width(left_area.width * 0.96)
-            anchor_in(left_area, t, 0.02, 0.98, align_edge=UL).shift(DOWN * 0.02 + RIGHT * 0.02)
-            return t
+    def clear_section(self):
+        """Limpia la escena entre secciones"""
+        self.wait(1)
+        self.clear()
+        # Re-agregar fondo y divider
+        bg = Rectangle(width=config.frame_width, height=config.frame_height)
+        bg.set_fill(StyleConfig.BG, 1).set_stroke(width=0)
+        divider = Line(
+            self.layout.safe_area.get_top(),
+            self.layout.safe_area.get_bottom()
+        )
+        divider.set_stroke(StyleConfig.TEXT_DIM, 1, 0.03)
+        self.add(bg, divider)
 
-        def make_subtitle(text: str) -> Text:
-            """Subtítulo debajo del título (en la columna izquierda)."""
-            s = Text(text, font_size=20, color=C_TEXT_DIM)
-            s.set_max_width(left_area.width * 0.96)
-            anchor_in(left_area, s, 0.02, 0.90, align_edge=UL).shift(DOWN * 0.02 + RIGHT * 0.02)
-            return s
+    # ========================================
+    # INTRODUCCIÓN
+    # ========================================
+    def intro(self):
+        fs_title = StyleConfig.get_font_size(0.065)
+        fs_subtitle = StyleConfig.get_font_size(0.035)
 
-        def make_card(content: Mobject, color: str = C_SURFACE, max_width: float | None = None, position=None) -> VGroup:
-            """Tarjeta con límites estrictos (max_width opcional)."""
-            padding_x = 0.5
-            padding_y = 0.35
+        title = Text(
+            "Lógica de Programación",
+            font_size=fs_title,
+            weight=BOLD,
+            color=StyleConfig.TEXT
+        )
 
-            if max_width is not None:
-                content.set_max_width(max_width - 2 * padding_x)
+        subtitle = Text(
+            "Estructuras de control visuales",
+            font_size=fs_subtitle,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, buff=0.5)
 
-            card_rect = RoundedRectangle(
+        tagline = Text(
+            "Aprende a pensar como programador",
+            font_size=fs_subtitle * 0.8,
+            color=StyleConfig.ACCENT
+        )
+        tagline.next_to(subtitle, DOWN, buff=0.3)
+
+        group = VGroup(title, subtitle, tagline).move_to(ORIGIN)
+
+        # Animación de entrada
+        self.play(Write(title), run_time=1.5)
+        self.play(FadeIn(subtitle, shift=UP * 0.3), run_time=1)
+        self.play(FadeIn(tagline, shift=UP * 0.3), run_time=1)
+
+        self.wait(2)
+
+        # Animación de salida
+        self.play(
+            FadeOut(group, shift=UP * 0.5),
+            run_time=1
+        )
+        self.remove(group)
+        self.clear_section()
+
+    # ========================================
+    # SECCIÓN 1: SECUENCIA
+    # ========================================
+    def section_sequential(self):
+        # Títulos
+        fs_title = StyleConfig.get_font_size(0.04)
+        title = Text("1. Secuencia", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(self.layout.get_pos("left", 0.05, 0.92))
+        title.align_to(self.layout.left_col, LEFT).shift(RIGHT * 0.3)
+
+        subtitle = Text(
+            "Ejecución paso a paso",
+            font_size=fs_title * 0.6,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, aligned_edge=LEFT)
+
+        self.play(Write(title), FadeIn(subtitle), run_time=1)
+
+        # Diagrama de secuencia (3 pasos)
+        steps = ["Inicio", "Proceso", "Fin"]
+        nodes = VGroup()
+
+        for i, label in enumerate(steps):
+            node = Node(label, self.layout, color=StyleConfig.SURFACE_2)
+            y_pos = 0.75 - (i * 0.25)
+            node.move_to(self.layout.get_pos("left", 0.35, y_pos))
+            nodes.add(node)
+
+        # Flechas entre pasos
+        arrows = VGroup()
+        for i in range(len(nodes) - 1):
+            arrow = always_redraw(
+                lambda s=nodes[i], e=nodes[i + 1]: Connection(s, e)
+            )
+            arrows.add(arrow)
+
+        # Token de flujo
+        token = FlowToken()
+        token.move_to(nodes[0])
+
+        # Explicación (derecha)
+        exp_text = Text(
+            "La secuencia es el flujo básico.\n"
+            "Las instrucciones se ejecutan\n"
+            "en orden, una después de otra.\n\n"
+            "Como seguir una receta de cocina:\n"
+            "1. Preparar ingredientes\n"
+            "2. Cocinar\n"
+            "3. Servir",
+            font_size=StyleConfig.get_font_size(0.022),
+            color=StyleConfig.TEXT,
+            line_spacing=1.6
+        )
+        exp_card = Card(exp_text)
+        exp_card.move_to(self.layout.right_col.get_center())
+
+        # Animaciones
+        diagram = VGroup(nodes, arrows)
+        self.play(FadeIn(nodes), Create(arrows), run_time=1.5)
+        self.play(FadeIn(exp_card, shift=RIGHT), run_time=1)
+        self.play(FadeIn(token), run_time=0.5)
+
+        # Animar flujo
+        for i in range(len(nodes)):
+            self.play(token.animate.move_to(nodes[i]), run_time=1)
+            nodes[i].set_fill(StyleConfig.SUCCESS, 1)
+            self.wait(0.5)
+            if i < len(nodes) - 1:
+                nodes[i].set_fill(StyleConfig.SURFACE_2, 1)
+
+        self.wait(2)
+        self.clear_section()
+
+    # ========================================
+    # SECCIÓN 2: CONDICIONALES
+    # ========================================
+    def section_conditionals(self):
+        # Títulos
+        fs_title = StyleConfig.get_font_size(0.04)
+        title = Text("2. Condicionales", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(self.layout.get_pos("left", 0.05, 0.92))
+        title.align_to(self.layout.left_col, LEFT).shift(RIGHT * 0.3)
+
+        subtitle = Text(
+            "Tomar decisiones",
+            font_size=fs_title * 0.6,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, aligned_edge=LEFT)
+
+        self.play(Write(title), FadeIn(subtitle), run_time=1)
+
+        # Diagrama condicional
+        start = Node("Inicio", self.layout)
+        start.move_to(self.layout.get_pos("left", 0.2, 0.75))
+
+        decision = DecisionNode("¿Condición?", self.layout)
+        decision.move_to(self.layout.get_pos("left", 0.5, 0.75))
+
+        true_path = Node("Camino A", self.layout, color="#064E3B")
+        true_path.move_to(self.layout.get_pos("left", 0.8, 0.85))
+
+        false_path = Node("Camino B", self.layout, color="#450A0A")
+        false_path.move_to(self.layout.get_pos("left", 0.8, 0.65))
+
+        end = Node("Fin", self.layout)
+        end.move_to(self.layout.get_pos("left", 0.5, 0.35))
+
+        # Flechas
+        arrow_start = always_redraw(lambda: Connection(start, decision))
+        arrow_true = always_redraw(
+            lambda: Connection(decision, true_path).set_color(StyleConfig.SUCCESS)
+        )
+        arrow_false = always_redraw(
+            lambda: Connection(decision, false_path).set_color(StyleConfig.ERROR)
+        )
+        arrow_end_true = always_redraw(
+            lambda: Connection(true_path, end).set_color(StyleConfig.SUCCESS)
+        )
+        arrow_end_false = always_redraw(
+            lambda: Connection(false_path, end).set_color(StyleConfig.ERROR)
+        )
+
+        # Etiquetas SI/NO
+        label_yes = Text("SÍ", font_size=StyleConfig.get_font_size(0.02), color=StyleConfig.SUCCESS)
+        label_yes.next_to(arrow_true, UP, buff=0.1)
+
+        label_no = Text("NO", font_size=StyleConfig.get_font_size(0.02), color=StyleConfig.ERROR)
+        label_no.next_to(arrow_false, DOWN, buff=0.1)
+
+        # Token
+        token = FlowToken()
+        token.move_to(start)
+
+        # Explicación
+        exp_text = Text(
+            "Las condicionales permiten\n"
+            "elegir entre diferentes caminos.\n\n"
+            "Solo UN camino se ejecuta:\n"
+            "• Si la condición es VERDADERA → Camino A\n"
+            "• Si la condición es FALSA → Camino B\n\n"
+            "Ejemplo: ¿Tienes paraguas?\n"
+            "SÍ → No te mojas\n"
+            "NO → Te mojas",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT,
+            line_spacing=1.5
+        )
+        exp_card = Card(exp_text)
+        exp_card.move_to(self.layout.right_col.get_center())
+
+        # Animaciones
+        diagram = VGroup(start, decision, true_path, false_path, end)
+        self.play(FadeIn(start), FadeIn(token), run_time=0.8)
+        self.play(Create(arrow_start), token.animate.move_to(decision), run_time=1)
+        self.play(FadeIn(decision), run_time=0.5)
+        self.play(FadeIn(exp_card, shift=RIGHT), run_time=1)
+
+        # Mostrar camino verdadero
+        self.play(
+            Create(arrow_true), FadeIn(label_yes), FadeIn(true_path),
+            run_time=1
+        )
+        self.play(token.animate.move_to(true_path), run_time=1)
+        self.wait(1)
+
+        # Retroceder y mostrar falso
+        self.play(
+            token.animate.move_to(decision),
+            true_path.animate.set_opacity(0.3),
+            run_time=0.8
+        )
+        self.play(
+            Create(arrow_false), FadeIn(label_no), FadeIn(false_path),
+            run_time=1
+        )
+        self.play(token.animate.move_to(false_path), run_time=1)
+
+        # Converger al fin
+        self.play(
+            token.animate.move_to(end),
+            Create(arrow_end_false),
+            false_path.animate.set_opacity(0.3),
+            true_path.animate.set_opacity(1),
+            run_time=1
+        )
+        self.play(Create(arrow_end_true), run_time=0.5)
+
+        self.wait(2)
+        self.clear_section()
+
+    # ========================================
+    # SECCIÓN 3: CICLOS
+    # ========================================
+    def section_loops(self):
+        # Títulos
+        fs_title = StyleConfig.get_font_size(0.04)
+        title = Text("3. Ciclos (Iteración)", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(self.layout.get_pos("left", 0.05, 0.92))
+        title.align_to(self.layout.left_col, LEFT).shift(RIGHT * 0.3)
+
+        subtitle = Text(
+            "Repetir tareas eficientemente",
+            font_size=fs_title * 0.6,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, aligned_edge=LEFT)
+
+        self.play(Write(title), FadeIn(subtitle), run_time=1)
+
+        # Contador
+        counter_label = Text(
+            "Iteración:",
+            font_size=StyleConfig.get_font_size(0.025),
+            color=StyleConfig.TEXT_DIM
+        )
+        counter_value = Integer(
+            0,
+            font_size=StyleConfig.get_font_size(0.05),
+            color=StyleConfig.WARNING
+        )
+        counter_value.next_to(counter_label, DOWN, buff=0.15)
+        counter_group = VGroup(counter_label, counter_value)
+        counter_group.move_to(self.layout.get_pos("left", 0.15, 0.8))
+
+        # Caja del ciclo
+        loop_box = RoundedRectangle(
+            corner_radius=0.1,
+            width=self.layout.col_width * 0.5,
+            height=self.layout.col_height * 0.35
+        )
+        loop_box.set_fill(StyleConfig.SURFACE, 1).set_stroke(StyleConfig.ACCENT, 2.5)
+        loop_box.move_to(self.layout.get_pos("left", 0.5, 0.55))
+
+        loop_text = Text(
+            "Ejecutar Tarea",
+            font_size=StyleConfig.get_font_size(0.028),
+            color=StyleConfig.TEXT
+        )
+        loop_text.move_to(loop_box)
+
+        # Flecha de retorno
+        loop_arrow = CurvedArrow(
+            loop_box.get_bottom() + LEFT * 0.8,
+            loop_box.get_top() + LEFT * 0.8,
+            angle=TAU * 0.6
+        ).set_stroke(StyleConfig.WARNING, 4)
+
+        # Flecha de salida
+        exit_arrow = Arrow(
+            loop_box.get_right(),
+            loop_box.get_right() + RIGHT * 1.5,
+            buff=0.1,
+            color=StyleConfig.SUCCESS,
+            stroke_width=4
+        )
+        exit_label = Text(
+            "Salida",
+            font_size=StyleConfig.get_font_size(0.022),
+            color=StyleConfig.SUCCESS,
+            weight=BOLD
+        )
+        exit_label.next_to(exit_arrow, UP, buff=0.15)
+
+        # Token
+        token = FlowToken(StyleConfig.WARNING)
+        token.move_to(loop_box.get_left() + RIGHT * 0.5)
+
+        # Explicación
+        exp_text = Text(
+            "Los ciclos repiten una tarea\n"
+            "mientras se cumpla una condición.\n\n"
+            "Tipos comunes:\n"
+            "• FOR: Repite N veces conocidas\n"
+            "• WHILE: Repite mientras sea verdadero\n\n"
+            "Ejemplo: Comer 5 manzanas\n"
+            "Repetir hasta contar 5",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT,
+            line_spacing=1.5
+        )
+        exp_card = Card(exp_text)
+        exp_card.move_to(self.layout.right_col.get_center())
+
+        # Animaciones
+        self.play(FadeIn(counter_group), run_time=0.8)
+        self.play(FadeIn(loop_box), FadeIn(loop_text), run_time=1)
+        self.play(Create(loop_arrow), run_time=0.8)
+        self.play(Create(exit_arrow), FadeIn(exit_label), run_time=0.8)
+        self.play(FadeIn(token), FadeIn(exp_card, shift=RIGHT), run_time=1)
+
+        # Animar iteraciones
+        for i in range(1, 5):
+            self.play(
+                token.animate.move_to(loop_box.get_center()),
+                run_time=0.5
+            )
+            self.play(
+                counter_value.animate.set_value(i),
+                run_time=0.4
+            )
+            self.play(
+                token.animate.move_to(loop_box.get_left() + RIGHT * 0.5),
+                run_time=0.5
+            )
+            self.wait(0.3)
+
+        # Salida del ciclo
+        self.play(
+            token.animate.move_to(exit_arrow.get_end()),
+            run_time=1.2
+        )
+
+        self.wait(2)
+        self.clear_section()
+
+    # ========================================
+    # SECCIÓN 4: FUNCIONES
+    # ========================================
+    def section_functions(self):
+        # Títulos
+        fs_title = StyleConfig.get_font_size(0.04)
+        title = Text("4. Funciones", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(self.layout.get_pos("left", 0.05, 0.92))
+        title.align_to(self.layout.left_col, LEFT).shift(RIGHT * 0.3)
+
+        subtitle = Text(
+            "Reutilizar lógica",
+            font_size=fs_title * 0.6,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, aligned_edge=LEFT)
+
+        self.play(Write(title), FadeIn(subtitle), run_time=1)
+
+        # Caja de función (molde)
+        func_box = RoundedRectangle(
+            corner_radius=0.12,
+            width=self.layout.col_width * 0.45,
+            height=self.layout.col_height * 0.45
+        )
+        func_box.set_fill("#1E3A8A", 1).set_stroke(StyleConfig.PURPLE, 2.5)
+        func_box.move_to(self.layout.get_pos("left", 0.25, 0.55))
+
+        func_header = Text(
+            "FUNCIÓN",
+            font_size=StyleConfig.get_font_size(0.028),
+            weight=BOLD,
+            color=StyleConfig.PURPLE
+        )
+        func_header.next_to(func_box.get_top(), DOWN, buff=0.25)
+
+        func_input = Text(
+            "→ Entrada (Parámetros)",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT
+        )
+        func_input.move_to(func_box.get_center() + UP * 0.35)
+
+        func_process = Text(
+            "⚙ Proceso Interno",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT
+        )
+        func_process.move_to(func_box.get_center())
+
+        func_output = Text(
+            "← Salida (Retorno)",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT
+        )
+        func_output.move_to(func_box.get_center() + DOWN * 0.35)
+
+        # Llamadas a la función (instancias)
+        call_boxes = VGroup()
+        call_colors = ["#065F46", "#5B21B6", "#9A3412"]
+
+        for i in range(3):
+            call = RoundedRectangle(
+                corner_radius=0.08,
+                width=self.layout.col_width * 0.25,
+                height=self.layout.col_height * 0.08
+            )
+            call.set_fill(call_colors[i], 0.85).set_stroke(WHITE, 1, 0.3)
+
+            call_text = Text(
+                f"Llamada {i + 1}",
+                font_size=StyleConfig.get_font_size(0.018),
+                color=StyleConfig.TEXT
+            )
+            call_text.move_to(call)
+
+            call_group = VGroup(call, call_text)
+            y_pos = 0.75 - (i * 0.22)
+            call_group.move_to(self.layout.get_pos("left", 0.7, y_pos))
+            call_boxes.add(call_group)
+
+        # Flechas de llamada
+        arrows = VGroup()
+        for call in call_boxes:
+            arrow = Arrow(
+                func_box.get_right(),
+                call.get_left(),
+                buff=0.15,
+                color=StyleConfig.TEXT_DIM,
+                stroke_width=2
+            )
+            arrows.add(arrow)
+
+        # Token que representa la ejecución
+        token = FlowToken(StyleConfig.PURPLE)
+        token.move_to(call_boxes[0])
+
+        # Explicación
+        exp_text = Text(
+            "Una función es un bloque de lógica\n"
+            "reutilizable que realiza una tarea.\n\n"
+            "Ventajas:\n"
+            "• Evita repetir código\n"
+            "• Organiza el programa\n"
+            "• Facilita mantenimiento\n\n"
+            "Ejemplo: Función 'sumar'\n"
+            "Se puede llamar muchas veces\n"
+            "con diferentes números",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT,
+            line_spacing=1.5
+        )
+        exp_card = Card(exp_text)
+        exp_card.move_to(self.layout.right_col.get_center())
+
+        # Animaciones
+        func_group = VGroup(func_box, func_header, func_input, func_process, func_output)
+        self.play(FadeIn(func_group, shift=LEFT * 0.3), run_time=1.5)
+        self.play(Create(arrows), run_time=1)
+        self.play(FadeIn(call_boxes, shift=RIGHT * 0.3), run_time=1)
+        self.play(FadeIn(exp_card, shift=RIGHT), run_time=1)
+        self.play(FadeIn(token), run_time=0.5)
+
+        # Animar llamadas
+        for i in range(3):
+            self.play(token.animate.move_to(call_boxes[i]), run_time=0.8)
+            call_boxes[i].set_fill(call_colors[i], 1)
+            self.wait(0.4)
+            if i < 2:
+                call_boxes[i].set_fill(call_colors[i], 0.85)
+
+        # Mostrar token volviendo a la función
+        self.play(
+            token.animate.move_to(func_box),
+            run_time=1
+        )
+
+        self.wait(2)
+        self.clear_section()
+
+    # ========================================
+    # SECCIÓN 5: FLUJO DE DATOS
+    # ========================================
+    def section_data_flow(self):
+        # Títulos
+        fs_title = StyleConfig.get_font_size(0.04)
+        title = Text("5. Flujo de Datos", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(self.layout.get_pos("left", 0.05, 0.92))
+        title.align_to(self.layout.left_col, LEFT).shift(RIGHT * 0.3)
+
+        subtitle = Text(
+            "Transformación de información",
+            font_size=fs_title * 0.6,
+            color=StyleConfig.TEXT_DIM
+        )
+        subtitle.next_to(title, DOWN, aligned_edge=LEFT)
+
+        self.play(Write(title), FadeIn(subtitle), run_time=1)
+
+        # Pipeline de datos
+        stages = ["Entrada", "Proceso", "Salida"]
+        stage_colors = [StyleConfig.ACCENT, StyleConfig.PURPLE, StyleConfig.SUCCESS]
+
+        pipeline = VGroup()
+        for i, stage in enumerate(stages):
+            box = RoundedRectangle(
                 corner_radius=0.1,
-                width=content.width + 2 * padding_x,
-                height=content.height + 2 * padding_y
+                width=self.layout.col_width * 0.25,
+                height=self.layout.col_height * 0.1
             )
-            card_rect.set_fill(color, 0.95).set_stroke(C_TEXT, 1, 0.1)
-            card_rect.move_to(content)
+            box.set_fill(stage_colors[i], 0.9).set_stroke(WHITE, 1.5)
 
-            shadow = card_rect.copy()
-            shadow.set_fill(BLACK, 0.3).set_stroke(width=0)
-            shadow.shift(DOWN * 0.03 + RIGHT * 0.03)
-            shadow.z_index = -1
-
-            card = VGroup(shadow, card_rect, content)
-            if position is not None:
-                card.move_to(position)
-            return card
-
-        def make_box(text: str, width: float = 2.2, height: float = 0.65,
-                     color: str = C_SURFACE_2, stroke_color: str = C_TEXT,
-                     font_size: int = 20) -> VGroup:
-            """Caja de proceso."""
-            box = RoundedRectangle(corner_radius=0.08, width=width, height=height)
-            box.set_fill(color, 1).set_stroke(stroke_color, 1.2, 0.4)
-            txt = Text(text, font_size=font_size, color=C_TEXT)
-            txt.move_to(box)
-            return VGroup(box, txt)
-
-        def make_arrow(start, end, color: str = C_TEXT_DIM, stroke_width: int = 3) -> Arrow:
-            """Flecha."""
-            return Arrow(start, end, buff=0.1, stroke_width=stroke_width,
-                         color=color, tip_length=0.15)
-
-        def make_token(color: str = C_WARNING) -> Dot:
-            """Token."""
-            return Dot(radius=0.08, color=color).set_stroke(WHITE, 1.2)
-
-        def make_explanation_card(text: str) -> VGroup:
-            """Tarjeta de explicación anclada a la columna derecha (responsive)."""
-            explanation = Text(text, font_size=18, color=C_TEXT, line_spacing=1.35)
-            explanation.set_max_width(right_area.width * 0.92)
-            card = make_card(explanation, C_SURFACE, max_width=right_area.width * 0.96)
-            anchor_in(right_area, card, 0.50, 0.52, align_edge=ORIGIN)
-            return card
-
-        def constrain_to_left_column(group: Mobject) -> Mobject:
-            return clamp_to_area(left_area, group, padding=0.10)
-
-        def constrain_to_right_column(group: Mobject) -> Mobject:
-            return clamp_to_area(right_area, group, padding=0.10)
-
-        # ========================================
-        # INTRODUCCIÓN (RESPONSIVE)
-        # ========================================
-
-        main_title = Text("Lógica de Programación", font_size=48, weight=BOLD, color=C_TEXT)
-        main_subtitle = Text("Fundamentos visuales para comprender el código",
-                             font_size=28, color=C_TEXT_DIM)
-        main_subtitle.next_to(main_title, DOWN, buff=0.35)
-
-        intro_group = VGroup(main_title, main_subtitle).move_to(ORIGIN)
-
-        self.play(FadeIn(main_title, shift=UP * 0.3), run_time=1.0)
-        self.play(FadeIn(main_subtitle, shift=UP * 0.3), run_time=0.8)
-        self.wait(1.5)
-        self.play(FadeOut(intro_group, shift=UP * 0.5), run_time=0.8)
-        self.remove(intro_group)
-
-        # ========================================
-        # SECCIÓN 1: CONDICIONALES
-        # ========================================
-
-        def section_conditionals():
-            title = make_title("1. Estructuras Condicionales")
-            subtitle = make_subtitle("El programa toma decisiones")
-
-            self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.0)
-            self.wait(0.4)
-
-            # === COLUMNA IZQUIERDA: DIAGRAMA (RESPONSIVE + FLECHAS ALWAYS_REDRAW) ===
-            start_box = make_box("Inicio", width=1.8, height=0.6)
-            anchor_in(left_area, start_box, 0.18, 0.55)
-
-            token = make_token()
-            token.move_to(start_box.get_center())
-
-            decision = Polygon(UP * 0.8, RIGHT * 1.1, DOWN * 0.8, LEFT * 1.1)
-            decision.set_fill(C_SURFACE, 1).set_stroke(C_ACCENT, 2, 0.8)
-            anchor_in(left_area, decision, 0.52, 0.55)
-
-            decision_text = Text("¿Condición?", font_size=19, color=C_TEXT)
-            decision_text.move_to(decision)
-
-            true_box = make_box("Ejecutar A", width=2.0, height=0.6,
-                                color="#064E3B", stroke_color=C_SUCCESS)
-            anchor_in(left_area, true_box, 0.82, 0.72)
-
-            false_box = make_box("Ejecutar B", width=2.0, height=0.6,
-                                 color="#450A0A", stroke_color=C_ERROR)
-            anchor_in(left_area, false_box, 0.82, 0.38)
-
-            arrow_start = always_redraw(
-                lambda: make_arrow(start_box.get_right(), decision.get_left(), color=C_TEXT_DIM)
+            text = Text(
+                stage,
+                font_size=StyleConfig.get_font_size(0.022),
+                color=StyleConfig.TEXT,
+                weight=BOLD
             )
-            arrow_true = always_redraw(
-                lambda: make_arrow(decision.get_corner(UR) + RIGHT * 0.05, true_box.get_left(),
-                                   color=C_SUCCESS, stroke_width=3)
+            text.move_to(box)
+
+            group = VGroup(box, text)
+            x_pos = 0.15 + (i * 0.35)
+            group.move_to(self.layout.get_pos("left", x_pos, 0.55))
+            pipeline.add(group)
+
+        # Flechas entre etapas
+        pipe_arrows = VGroup()
+        for i in range(len(pipeline) - 1):
+            arrow = Arrow(
+                pipeline[i].get_right(),
+                pipeline[i + 1].get_left(),
+                buff=0.15,
+                color=StyleConfig.TEXT_DIM,
+                stroke_width=3
             )
-            arrow_false = always_redraw(
-                lambda: make_arrow(decision.get_corner(DR) + RIGHT * 0.05, false_box.get_left(),
-                                   color=C_ERROR, stroke_width=3)
-            )
+            pipe_arrows.add(arrow)
 
-            label_true = always_redraw(lambda: Text("SÍ", font_size=16, color=C_SUCCESS, weight=BOLD).next_to(arrow_true, UP, buff=0.06))
-            label_false = always_redraw(lambda: Text("NO", font_size=16, color=C_ERROR, weight=BOLD).next_to(arrow_false, DOWN, buff=0.06))
+        # Datos que fluyen
+        data_packets = VGroup()
+        for i in range(3):
+            packet = Circle(radius=0.15, color=StyleConfig.WARNING, fill_opacity=0.8)
+            packet.set_fill(StyleConfig.WARNING, 0.8)
+            data_packets.add(packet)
 
-            diagram = VGroup(
-                start_box, token, decision, decision_text,
-                true_box, false_box,
-                arrow_start, arrow_true, arrow_false,
-                label_true, label_false
-            )
-            diagram = constrain_to_left_column(diagram)
+        # Explicación
+        exp_text = Text(
+            "Los datos fluyen a través del programa\n"
+            "transformándose en cada etapa.\n\n"
+            "Proceso típico:\n"
+            "1. ENTRADA: Recibir datos\n"
+            "2. PROCESO: Transformar datos\n"
+            "3. SALIDA: Mostrar resultados\n\n"
+            "Ejemplo: Calculadora\n"
+            "Números → Operación → Resultado",
+            font_size=StyleConfig.get_font_size(0.02),
+            color=StyleConfig.TEXT,
+            line_spacing=1.5
+        )
+        exp_card = Card(exp_text)
+        exp_card.move_to(self.layout.right_col.get_center())
 
-            explanation_card = make_explanation_card(
-                "Una condición divide el flujo en caminos exclusivos.\n\n"
-                "Solo UN camino se ejecuta en cada evaluación."
-            )
-            explanation_card = constrain_to_right_column(explanation_card)
+        # Animaciones
+        self.play(FadeIn(pipeline), Create(pipe_arrows), run_time=1.5)
+        self.play(FadeIn(exp_card, shift=RIGHT), run_time=1)
 
-            self.play(FadeIn(start_box), FadeIn(token), run_time=0.6)
-            self.play(Create(arrow_start), run_time=0.5)
-            self.play(FadeIn(decision), FadeIn(decision_text), run_time=0.6)
-            self.play(FadeIn(explanation_card, shift=RIGHT * 0.2), run_time=0.6)
-            self.wait(0.8)
-
-            self.play(token.animate.move_to(decision.get_center()), run_time=0.8)
-            self.wait(0.4)
-
-            self.play(Create(arrow_true), FadeIn(true_box), FadeIn(label_true), run_time=0.8)
-            self.play(token.animate.move_to(true_box.get_center()), run_time=1.0)
-            self.wait(1.2)
-
-            self.play(token.animate.move_to(decision.get_center()),
-                      true_box.animate.set_opacity(0.25), run_time=0.6)
-
-            self.play(Create(arrow_false), FadeIn(false_box), FadeIn(label_false), run_time=0.8)
-            self.play(token.animate.move_to(false_box.get_center()), run_time=1.0)
-            self.wait(1.5)
-
-            self.play(FadeOut(VGroup(title, subtitle, diagram, explanation_card), shift=UP * 0.5), run_time=0.8)
-
-        section_conditionals()
-
-        # ========================================
-        # SECCIÓN 2: CONTROL DE FLUJO
-        # ========================================
-
-        def section_flow_control():
-            title = make_title("2. Control de Flujo")
-            subtitle = make_subtitle("El orden determina el resultado")
-
-            self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.0)
-            self.wait(0.4)
-
-            steps = VGroup()
-            step_labels = ["Entrada", "Procesamiento", "Validación"]
-
-            for i, label in enumerate(step_labels):
-                step = make_box(label, width=2.6, height=0.6)
-                anchor_in(left_area, step, 0.25, 0.70 - i * 0.20)
-                steps.add(step)
-
-            exit_box = make_box("⚠ Salida", width=2.2, height=0.6,
-                                color="#7F1D1D", stroke_color=C_ERROR)
-            anchor_in(left_area, exit_box, 0.74, 0.50)
-
-            arrow_1 = always_redraw(lambda: make_arrow(steps[0].get_bottom(), steps[1].get_top(), color=C_TEXT_DIM, stroke_width=3))
-            arrow_2 = always_redraw(lambda: make_arrow(steps[1].get_bottom(), steps[2].get_top(), color=C_TEXT_DIM, stroke_width=3))
-            arrow_exit = always_redraw(lambda: make_arrow(steps[1].get_right(), exit_box.get_left(), color=C_ERROR, stroke_width=3))
-
-            token = make_token()
-            token.move_to(steps[0].get_center())
-
-            diagram = VGroup(steps, exit_box, arrow_1, arrow_2, arrow_exit, token)
-            diagram = constrain_to_left_column(diagram)
-
-            explanation_card = make_explanation_card(
-                "El flujo sigue un orden definido, pero puede interruptirse ante condiciones excepcionales.\n\n"
-                "Esto permite manejar errores o casos especiales."
-            )
-            explanation_card = constrain_to_right_column(explanation_card)
-
-            self.play(FadeIn(steps, shift=RIGHT * 0.2), run_time=0.8)
-            self.play(Create(arrow_1), Create(arrow_2), run_time=0.6)
-            self.play(Create(arrow_exit), FadeIn(exit_box), run_time=0.6)
-            self.play(FadeIn(token), run_time=0.4)
-            self.play(FadeIn(explanation_card, shift=RIGHT * 0.2), run_time=0.6)
-            self.wait(0.8)
-
-            self.play(token.animate.move_to(steps[0].get_center()), run_time=0.5)
-            self.wait(0.4)
-            self.play(token.animate.move_to(steps[1].get_center()), run_time=0.8)
-            self.wait(0.6)
-            self.play(token.animate.move_to(exit_box.get_center()), run_time=1.0)
-            self.wait(1.5)
-
-            self.play(FadeOut(VGroup(title, subtitle, diagram, explanation_card), shift=UP * 0.5), run_time=0.8)
-
-        section_flow_control()
-
-        # ========================================
-        # SECCIÓN 3: CICLOS / ITERACIÓN (CORREGIDA)
-        # ========================================
-
-        def section_loops():
-            title = make_title("3. Iteración (Ciclos)")
-            subtitle = make_subtitle("Repetición controlada de tareas")
-
-            self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.2)
-            self.wait(0.5)
-
-            # === COLUMNA IZQUIERDA: DIAGRAMA (todo debe estar en LEFT) ===
-            counter_label = Text("Iteración:", font_size=24, color=C_TEXT_DIM)
-            counter_value = Integer(0, font_size=48, color=C_WARNING)
-            counter_value.next_to(counter_label, DOWN, buff=0.2)
-            counter_group = VGroup(counter_label, counter_value)
-            counter_group.move_to(LEFT * 6.5)  # Más a la izquierda
-
-            # Caja del bucle (CENTRO-IZQUIERDA, no RIGHT)
-            loop_box = RoundedRectangle(corner_radius=0.12, width=4.0, height=2.5)
-            loop_box.set_fill(C_SURFACE, 1).set_stroke(C_ACCENT, 2, 0.5)
-            loop_box.move_to(LEFT * 2.0)  # Cambiado de RIGHT * 1.5 a LEFT * 2.0
-
-            loop_content = Text("Ejecutar Tarea", font_size=24, color=C_TEXT)
-            loop_content.move_to(loop_box)
-
-            # Flecha curva de retorno (ajustada)
-            loop_arrow = CurvedArrow(
-                loop_box.get_bottom() + LEFT * 1.7,
-                loop_box.get_top() + LEFT * 1.7,
-                angle=TAU * 0.58,
-            ).set_stroke(C_WARNING, 4, 0.9)
-
-            # Flecha de salida (más corta, sin cruzar al lado derecho)
-            exit_arrow = Arrow(
-                loop_box.get_right(),
-                loop_box.get_right() + RIGHT * 1.5,
-                buff=0.1,
-                color=C_SUCCESS,
-                stroke_width=4
-            )
-            exit_label = Text("Salida", font_size=20, color=C_SUCCESS, weight=BOLD)
-            exit_label.next_to(exit_arrow, UP, buff=0.1)
-
-            token = make_token(C_WARNING)
-            token.move_to(loop_box.get_left() + RIGHT * 0.6)
-
-            # === COLUMNA DERECHA: EXPLICACIÓN ===
-            explanation = Text(
-                "El ciclo repite mientras la condición\n"
-                "sea verdadera. La salida previene\n"
-                "bucles infinitos.",
-                font_size=22, color=C_TEXT, line_spacing=1.4
-            )
-            explanation_card = make_card(explanation, C_SURFACE)
-            explanation_card.move_to(RIGHT * 4.0)  # Columna derecha
-
-            diagram = VGroup(
-                counter_group, loop_box, loop_content, loop_arrow,
-                exit_arrow, exit_label, token
-            )
-
-            # Asegurar que el diagrama no cruce el centro
-            if diagram.get_right()[0] > -0.5:
-                diagram.shift(LEFT * (diagram.get_right()[0] + 0.5))
-
-            # Animación de entrada
-            self.play(FadeIn(counter_group), run_time=0.8)
-            self.play(FadeIn(loop_box), FadeIn(loop_content), run_time=0.8)
-            self.play(Create(loop_arrow), run_time=0.8)
-            self.play(Create(exit_arrow), FadeIn(exit_label), run_time=0.8)
-            self.play(FadeIn(token), run_time=0.5)
-            self.play(FadeIn(explanation_card, shift=RIGHT * 0.2), run_time=0.8)
-            self.wait(1.0)
-
-            # Animación de iteraciones
-            max_iterations = 4
-            for i in range(1, max_iterations + 1):
-                self.play(token.animate.move_to(loop_box.get_center()), run_time=0.4)
-                self.play(counter_value.animate.set_value(i), run_time=0.3)
-                self.play(token.animate.move_to(loop_box.get_left() + RIGHT * 0.6), run_time=0.4)
-                self.wait(0.2)
-
-            self.play(token.animate.move_to(exit_arrow.get_end()), run_time=1.0)
-            self.wait(1.5)
-
+        # Animar flujo de datos
+        for i, packet in enumerate(data_packets):
+            packet.move_to(pipeline[0].get_left() + LEFT * 0.5)
+            self.play(FadeIn(packet), run_time=0.5)
             self.play(
-                FadeOut(VGroup(title, subtitle, diagram, explanation_card), shift=UP * 0.5),
-                run_time=1.0
+                packet.animate.move_to(pipeline[0]),
+                run_time=0.8
             )
-
-        section_loops()
-
-        # ========================================
-        # SECCIÓN 4: CLASES Y OBJETOS (CORREGIDA)
-        # ========================================
-
-        def section_classes():
-            title = make_title("4. Clases y Objetos")
-            subtitle = make_subtitle("Moldes e instancias")
-
-            self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.2)
-            self.wait(0.5)
-
-            # === COLUMNA IZQUIERDA: DIAGRAMA ===
-            class_box = RoundedRectangle(corner_radius=0.12, width=3.8, height=2.8)
-            class_box.set_fill("#1E3A8A", 1).set_stroke(C_PURPLE, 2.5, 0.8)
-            class_box.move_to(LEFT * 6.0)  # Más a la izquierda
-
-            class_title = Text("CLASE", font_size=28, weight=BOLD, color=C_PURPLE)
-            class_title.next_to(class_box.get_top(), DOWN, buff=0.2)
-
-            class_attrs = Text("• Atributos", font_size=22, color=C_TEXT)
-            class_attrs.move_to(class_box.get_center() + UP * 0.4)
-
-            class_methods = Text("• Métodos", font_size=22, color=C_TEXT)
-            class_methods.move_to(class_box.get_center() + DOWN * 0.4)
-
-            class_group = VGroup(class_box, class_title, class_attrs, class_methods)
-
-            # Objetos (IZQUIERDA-CENTRO, no RIGHT)
-            def create_object(name: str, position, color: str) -> VGroup:
-                obj_box = RoundedRectangle(corner_radius=0.1, width=2.5, height=0.7)
-                obj_box.set_fill(color, 0.85).set_stroke(WHITE, 1, 0.3)
-                obj_text = Text(name, font_size=22, color=C_TEXT, weight=BOLD)
-                obj_text.move_to(obj_box)
-                return VGroup(obj_box, obj_text).move_to(position)
-
-            # Cambiado de RIGHT * 5.0 a LEFT * 1.5/2.5/3.5
-            obj_a = create_object("Objeto A", LEFT * 1.5 + UP * 1.6, "#065F46")
-            obj_b = create_object("Objeto B", LEFT * 2.5 + DOWN * 0.0, "#5B21B6")
-            obj_c = create_object("Objeto C", LEFT * 1.5 + DOWN * 1.6, "#9A3412")
-
-            objects_group = VGroup(obj_a, obj_b, obj_c)
-
-            # Flechas de instanciación (más cortas)
-            arrow_a = Arrow(class_box.get_right(), obj_a.get_left(),
-                            buff=0.1, color=C_TEXT_DIM, stroke_width=2)
-            arrow_b = Arrow(class_box.get_right(), obj_b.get_left(),
-                            buff=0.1, color=C_TEXT_DIM, stroke_width=2)
-            arrow_c = Arrow(class_box.get_right(), obj_c.get_left(),
-                            buff=0.1, color=C_TEXT_DIM, stroke_width=2)
-
-            arrows_group = VGroup(arrow_a, arrow_b, arrow_c)
-
-            # === COLUMNA DERECHA: EXPLICACIÓN ===
-            explanation = Text(
-                "La CLASE define la estructura.\n"
-                "Cada OBJETO es una instancia\n"
-                "independiente con su propio estado.",
-                font_size=22, color=C_TEXT, line_spacing=1.4
-            )
-            explanation_card = make_card(explanation, C_SURFACE)
-            explanation_card.move_to(RIGHT * 4.0)  # Columna derecha
-
-            diagram = VGroup(class_group, objects_group, arrows_group)
-
-            # Asegurar que el diagrama no cruce el centro
-            if diagram.get_right()[0] > -0.5:
-                diagram.shift(LEFT * (diagram.get_right()[0] + 0.5))
-
-            # Animación de entrada
-            self.play(FadeIn(class_group, shift=LEFT * 0.2), run_time=1.0)
-            self.wait(0.5)
-            self.play(Create(arrows_group), run_time=0.8)
-            self.play(FadeIn(objects_group, shift=RIGHT * 0.2), run_time=1.0)
-            self.play(FadeIn(explanation_card, shift=RIGHT * 0.2), run_time=0.8)
-            self.wait(1.5)
-
-            # Demostrar independencia
-            self.play(obj_a.animate.scale(1.1), run_time=0.5)
-            self.wait(0.3)
-            self.play(obj_a.animate.scale(1 / 1.1), obj_b.animate.scale(1.1), run_time=0.5)
-            self.wait(0.3)
-            self.play(obj_b.animate.scale(1 / 1.1), obj_c.animate.scale(1.1), run_time=0.5)
-            self.wait(1.2)
-
             self.play(
-                FadeOut(VGroup(title, subtitle, diagram, explanation_card), shift=UP * 0.5),
-                run_time=1.0
+                packet.animate.move_to(pipeline[1]),
+                run_time=0.8
             )
-
-        section_classes()
-        # ========================================
-        # SECCIÓN 5: RESUMEN
-        # ========================================
-
-        def section_summary():
-            title = make_title("Resumen de Conceptos")
-            subtitle = make_subtitle("Cuatro pilares fundamentales")
-
-            self.play(Write(title), FadeIn(subtitle, shift=UP * 0.3), run_time=1.0)
-            self.wait(0.4)
-
-            # === COLUMNA IZQUIERDA: GRID 2x2 ===
-            concepts = VGroup()
-
-            # Condicionales
-            cond_icon = Polygon(UP * 0.22, RIGHT * 0.35, DOWN * 0.22, LEFT * 0.35)
-            cond_icon.set_fill(C_ACCENT, 0.3).set_stroke(C_ACCENT, 2)
-            cond_text = Text("Condicionales", font_size=17, color=C_TEXT)
-            cond_group = VGroup(cond_icon, cond_text).arrange(DOWN, buff=0.12)
-            cond_card = make_card(cond_group, C_SURFACE, max_width=3.0)
-            cond_card.move_to(LEFT * 4.2 + UP * 1.1)
-
-            # Flujo
-            flow_icon = Rectangle(width=0.7, height=0.5, color=C_TEXT_DIM)
-            flow_icon.set_fill(C_TEXT_DIM, 0.3)
-            flow_text = Text("Flujo", font_size=17, color=C_TEXT)
-            flow_group = VGroup(flow_icon, flow_text).arrange(DOWN, buff=0.12)
-            flow_card = make_card(flow_group, C_SURFACE, max_width=3.0)
-            flow_card.move_to(LEFT * 0.8 + UP * 1.1)
-
-            # Ciclos
-            loop_icon = Circle(radius=0.27, color=C_WARNING)
-            loop_icon.set_fill(C_WARNING, 0.3).set_stroke(C_WARNING, 2)
-            loop_text = Text("Ciclos", font_size=17, color=C_TEXT)
-            loop_group = VGroup(loop_icon, loop_text).arrange(DOWN, buff=0.12)
-            loop_card = make_card(loop_group, C_SURFACE, max_width=3.0)
-            loop_card.move_to(LEFT * 4.2 + DOWN * 1.1)
-
-            # Objetos
-            obj_icon = RoundedRectangle(width=0.65, height=0.65, corner_radius=0.09, color=C_PURPLE)
-            obj_icon.set_fill(C_PURPLE, 0.3).set_stroke(C_PURPLE, 2)
-            obj_text = Text("Objetos", font_size=17, color=C_TEXT)
-            obj_group = VGroup(obj_icon, obj_text).arrange(DOWN, buff=0.12)
-            obj_card = make_card(obj_group, C_SURFACE, max_width=3.0)
-            obj_card.move_to(LEFT * 0.8 + DOWN * 1.1)
-
-            concepts.add(cond_card, flow_card, loop_card, obj_card)
-
-            concepts = constrain_to_left_column(concepts)
-
-            # === COLUMNA DERECHA: CIERRE ===
-            closing = Text(
-                "Comprender la lógica es el primer paso\n"
-                "para dominar cualquier lenguaje.",
-                font_size=19, color=C_TEXT, line_spacing=1.4, weight=BOLD
+            packet.set_fill(StyleConfig.PURPLE, 0.8)
+            self.play(
+                packet.animate.move_to(pipeline[2]),
+                run_time=0.8
             )
-            closing_card = make_card(closing, C_SURFACE, max_width=6.2)
+            packet.set_fill(StyleConfig.SUCCESS, 0.8)
+            self.wait(0.3)
+            self.play(FadeOut(packet), run_time=0.3)
 
-            anchor_in(right_area, closing_card, 0.50, 0.52)
-            closing_card = constrain_to_right_column(closing_card)
+        self.wait(2)
+        self.clear_section()
 
-            self.play(FadeIn(cond_card, shift=UP * 0.2), run_time=0.6)
-            self.wait(0.2)
-            self.play(FadeIn(flow_card, shift=UP * 0.2), run_time=0.6)
-            self.wait(0.2)
-            self.play(FadeIn(loop_card, shift=DOWN * 0.2), run_time=0.6)
-            self.wait(0.2)
-            self.play(FadeIn(obj_card, shift=DOWN * 0.2), run_time=0.6)
-            self.wait(0.4)
-            self.play(FadeIn(closing_card, shift=RIGHT * 0.2), run_time=0.8)
-            self.wait(3.5)
+    # ========================================
+    # RESUMEN
+    # ========================================
+    def summary(self):
+        fs_title = StyleConfig.get_font_size(0.05)
+        title = Text("Resumen", font_size=fs_title, weight=BOLD, color=StyleConfig.TEXT)
+        title.move_to(ORIGIN + UP * 2)
 
-            self.play(FadeOut(VGroup(title, subtitle, concepts, closing_card), shift=UP * 0.5), run_time=1.2)
+        self.play(Write(title), run_time=1)
 
-        section_summary()
+        # Grid 2x3 de conceptos - POSICIONES 3D CORRECTAS
+        concepts = [
+            ("Secuencia", StyleConfig.ACCENT, "→"),
+            ("Condicionales", StyleConfig.SUCCESS, "◊"),
+            ("Ciclos", StyleConfig.WARNING, "⟳"),
+            ("Funciones", StyleConfig.PURPLE, "⚡"),
+            ("Datos", StyleConfig.ORANGE, "◉"),
+            ("Control", StyleConfig.PINK, "⌬"),
+        ]
 
-        # ========================================
-        # CIERRE
-        # ========================================
+        cards = VGroup()
+        # ✅ Coordenadas 3D (x, y, z)
+        positions = [
+            (-2.5, 0.8, 0), (0, 0.8, 0), (2.5, 0.8, 0),
+            (-2.5, -0.8, 0), (0, -0.8, 0), (2.5, -0.8, 0),
+        ]
 
-        end_text = Text("Fin", font_size=52, color=C_TEXT_DIM)
-        self.play(FadeIn(end_text), run_time=1.2)
-        self.wait(1.5)
-        self.play(FadeOut(end_text), run_time=0.8)
+        for i, (name, color, icon) in enumerate(concepts):
+            icon_shape = Text(icon, font_size=60, color=color)
+            label = Text(name, font_size=StyleConfig.get_font_size(0.025), color=StyleConfig.TEXT)
+            label.next_to(icon_shape, DOWN, buff=0.3)
+
+            content = VGroup(icon_shape, label)
+            card = Card(content, color=StyleConfig.SURFACE)
+            card.move_to(positions[i])  # ✅ Ahora es un array 3D
+            cards.add(card)
+
+        self.play(
+            LaggedStart(
+                *[FadeIn(c, shift=UP * 0.3) for c in cards],
+                lag_ratio=0.15
+            ),
+            run_time=2.5
+        )
+
+        # Mensaje final
+        final_msg = Text(
+            "Dominar estos conceptos es la base\n"
+            "para aprender cualquier lenguaje",
+            font_size=StyleConfig.get_font_size(0.025),
+            color=StyleConfig.TEXT_DIM
+        )
+        final_msg.next_to(cards, DOWN, buff=0.8)
+
+        self.play(FadeIn(final_msg, shift=UP * 0.3), run_time=1.5)
+
+        self.wait(3)
+        self.clear_section()
+
+
+    # ========================================
+    # PANTALLA FINAL
+    # ========================================
+    def end_screen(self):
+        end_text = Text(
+            "Fin",
+            font_size=StyleConfig.get_font_size(0.12),
+            color=StyleConfig.TEXT_DIM
+        )
+
+        credit = Text(
+            "Lógica de Programación Visual",
+            font_size=StyleConfig.get_font_size(0.03),
+            color=StyleConfig.ACCENT
+        )
+        credit.next_to(end_text, DOWN, buff=0.5)
+
+        self.play(FadeIn(end_text), run_time=1.5)
+        self.play(FadeIn(credit), run_time=1)
+        self.wait(2)
+
+
+# ==========================================
+# 5. CONFIGURACIÓN DE RENDER
+# ==========================================
+if __name__ == "__main__":
+    # Configurar resolución y calidad
+    config.pixel_width = 1920
+    config.pixel_height = 1080
+    config.frame_rate = 30
+    config.background_color = StyleConfig.BG
