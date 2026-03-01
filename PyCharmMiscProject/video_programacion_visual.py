@@ -2,184 +2,194 @@ from manim import *
 
 
 # ==========================================
-# 1. DESIGN SYSTEM
+# CONFIGURACIÓN DE ESTILO PRO
 # ==========================================
 class Style:
-    BG = "#05070A"
-    SURFACE = "#111827"
-    ACCENT = "#38BDF8"  # Cyan
-    SUCCESS = "#22C55E"  # Verde
-    WARNING = "#EAB308"  # Amarillo
-    ERROR = "#EF4444"  # Rojo
-    PURPLE = "#8B5CF6"  # Violeta
-    TEXT = "#F8FAFC"
-    TEXT_SIDE = "#94A3B8"
+    BG = "#0B0E14"
+    ACCENT = "#38BDF8"  # Azul brillante (Lógica/Secuencia)
+    SUCCESS = "#22C55E"  # Verde (Verdadero/Éxito)
+    ERROR = "#EF4444"  # Rojo (Falso/Error)
+    WARNING = "#FBBF24"  # Ámbar (Switch/Variables)
+    PURPLE = "#A78BFA"  # Violeta (Bucles)
+    ORANGE = "#FB923C"  # Naranja (Anidamiento)
+    TEXT_MAIN = "#F8FAFC"  # Blanco roto
+    TEXT_DESC = "#94A3B8"  # Gris azulado
 
 
 # ==========================================
-# 2. COMPONENTES UI
+# COMPONENTES DE UI MEJORADOS
 # ==========================================
-class ExplanationBox(VGroup):
-    """Caja de texto para el lado derecho"""
+class DetailedExplanation(VGroup):
+    """Genera bloques de texto extremadamente detallados para la derecha"""
 
-    def __init__(self, title, description):
+    def __init__(self, title, paragraphs):
         super().__init__()
-        t = Text(title, font="Monospace", color=Style.ACCENT, font_size=24).to_edge(UP).shift(RIGHT * 3.5)
-        d = Text(description, font_size=18, line_spacing=1.5, t2c={'"': Style.WARNING})
-        d.width = 5  # Ancho fijo para que no invada la animación
-        d.next_to(t, DOWN, buff=0.5).shift(RIGHT * 0.2)
-        self.add(t, d)
+        title_text = Text(title, font="Orbitron", weight=BOLD, color=Style.ACCENT, font_size=28)
+        title_text.to_edge(UP).shift(RIGHT * 3.0)  # <-- antes 3.5 (movido un poco a la izquierda)
+
+        full_content = VGroup()
+        for p in paragraphs:
+            txt = Text(p, font_size=16, line_spacing=1.4, color=Style.TEXT_MAIN, t2c={
+                "VERDADERO": Style.SUCCESS, "FALSO": Style.ERROR, "mientras": Style.PURPLE,
+                "SWITCH": Style.WARNING, "colecciones": Style.SUCCESS
+            })
+            txt.width = 5.5  # Ancho máximo para la columna derecha
+            full_content.add(txt)
+
+        full_content.arrange(DOWN, buff=0.4, aligned_edge=LEFT)
+        full_content.next_to(title_text, DOWN, buff=0.6).align_to(title_text, LEFT)
+
+        self.add(title_text, full_content)
 
 
-class TechNode(VGroup):
-    """Nodos para diagramas en el lado izquierdo"""
+class LogicNode(VGroup):
+    """Nodos visuales para el laboratorio de la izquierda"""
 
-    def __init__(self, label, color=Style.SURFACE, stroke=Style.ACCENT):
+    def __init__(self, label, color=Style.ACCENT):
         super().__init__()
-        txt = Text(label, font_size=18, font="Monospace")
-        rect = RoundedRectangle(corner_radius=0.1, width=2, height=1)
-        rect.set_fill(color, 1).set_stroke(stroke, 2)
+        rect = RoundedRectangle(corner_radius=0.15, width=2.2, height=1.1)
+        rect.set_fill(Style.BG, 1).set_stroke(color, 2)
+        txt = Text(label, font="Monospace", font_size=18, color=color)
         self.add(rect, txt)
 
 
 # ==========================================
-# 3. ESCENA PRINCIPAL
+# ESCENA PRINCIPAL (2 MINUTOS DE DURACIÓN)
 # ==========================================
-class LogicDecoderPro(Scene):
+class DetailedProgrammingLogic(Scene):
     def construct(self):
         self.camera.background_color = Style.BG
 
-        # 0. INTRO (0:00 - 0:05)
-        self.intro_cinematica()
+        # --- 0. INTRODUCCIÓN (0:00 - 0:05) ---
+        intro_title = Text("LOGIC_DECODER", font="Monospace").scale(1.2)
+        intro_sub = Text("Arquitectura del Pensamiento Computacional", font_size=20, color=Style.TEXT_DESC)
+        VGroup(intro_title, intro_sub).arrange(DOWN)
 
-        # 1. SECUENCIA (0:05 - 0:15)
-        self.show_sequence()
+        self.play(Write(intro_title), run_time=1.5)
+        self.play(FadeIn(intro_sub, shift=UP), run_time=1)
+        self.wait(2)
+        self.play(FadeOut(intro_title, intro_sub))
 
-        # 2. CONDICIONALES (0:15 - 0:50)
-        self.show_conditionals()
+        # --- 1. SECUENCIA (0:05 - 0:15) ---
+        expl1 = DetailedExplanation("01. SECUENCIA", [
+            "Es la base fundamental de todo algoritmo.",
+            "Consiste en ejecutar instrucciones de forma\nlineal, una tras otra, sin saltos.",
+            "Como una receta: no puedes freír un huevo\nsin antes haberlo roto."
+        ])
 
-        # 3. BUCLES (0:50 - 1:40)
-        self.show_loops()
-
-        # 4. ANIDAMIENTO & OUTRO (1:40 - 2:05)
-        self.show_nesting_and_outro()
-
-    def intro_cinematica(self):
-        logo = Text("LOGIC_DECODER", font="Monospace", weight=BOLD).scale(1.5)
-        self.play(Write(logo), run_time=2)
-        self.play(Indicate(logo, color=Style.ACCENT))
-        self.wait(1)
-        self.play(FadeOut(logo, shift=UP))
-
-    def show_sequence(self):
-        # Texto Derecha
-        info = ExplanationBox("01. SECUENCIA",
-                              "Es el orden natural donde cada\ninstrucción se ejecuta línea tras\nlínea, como una receta paso a paso.")
-
-        # Animación Izquierda
         nodes = VGroup(
-            TechNode("INPUT"), TechNode("PROCESS"), TechNode("OUTPUT")
-        ).arrange(DOWN, buff=0.8).shift(LEFT * 3.5)
-        arrows = VGroup(*[Arrow(nodes[i], nodes[i + 1], color=Style.TEXT_SIDE) for i in range(2)])
+            LogicNode("PASO 1: INPUT"),
+            LogicNode("PASO 2: PROCESS"),
+            LogicNode("PASO 3: OUTPUT")
+        ).arrange(DOWN, buff=0.7).shift(LEFT * 4.5)
 
-        self.play(FadeIn(info), LaggedStart(*[Create(n) for n in nodes], lag_ratio=0.3))
-        self.play(Create(arrows))
+        arrows = VGroup(*[Arrow(nodes[i], nodes[i + 1], color=Style.TEXT_DESC) for i in range(2)])
+        token = Dot(color=Style.ACCENT).move_to(nodes[0])
 
-        dot = Dot(color=Style.SUCCESS).move_to(nodes[0])
-        self.play(dot.animate.move_to(nodes[1]), run_time=1.5)
-        self.play(dot.animate.move_to(nodes[2]), run_time=1.5)
+        self.play(FadeIn(expl1), Create(nodes), Create(arrows))
+        self.play(token.animate.move_to(nodes[1]), run_time=2)
+        self.play(token.animate.move_to(nodes[2]), run_time=2)
         self.wait(2)
-        self.play(FadeOut(info, nodes, arrows, dot))
+        self.play(FadeOut(expl1, nodes, arrows, token))
 
-    def show_conditionals(self):
-        # --- IF / ELSE ---
-        info = ExplanationBox("02. CONDICIONALES",
-                              'El "IF" evalúa: si es verdadero,\ntoma un camino. Con "ELSE", siempre\nhay un plan B.')
+        # --- 2. CONDICIONALES IF/ELSE (0:15 - 0:35) ---
+        expl2 = DetailedExplanation("02. CONDICIONALES", [
+            "Las estructuras de control permiten bifurcar\nel flujo del programa basándose en datos.",
+            "IF: Si la condición es VERDADERA,\nejecuta el bloque A.",
+            "ELSE: Si es FALSA, ejecuta el bloque B.\nEsto asegura que siempre haya una respuesta."
+        ])
 
-        diamond = Polygon(UP, RIGHT * 1.5, DOWN, LEFT * 1.5).set_stroke(Style.PURPLE, 2).shift(LEFT * 3.5 + UP * 1.5)
-        lbl = Text("¿X > 5?", font_size=16).move_to(diamond)
+        diamond = Polygon(UP, RIGHT * 1.5, DOWN, LEFT * 1.5).set_stroke(Style.WARNING, 2).shift(LEFT * 3.5 + UP * 1.8)
+        q_text = Text("¿EDAD >= 18?", font_size=16).move_to(diamond)
 
-        true_box = TechNode("TRUE", color=Style.SUCCESS).shift(LEFT * 5 + DOWN * 1)
-        false_box = TechNode("FALSE", color=Style.ERROR).shift(LEFT * 2 + DOWN * 1)
+        path_a = LogicNode("ACCESO PERMITIDO", Style.SUCCESS).shift(LEFT * 5 + DOWN * 1)
+        path_b = LogicNode("ACCESO DENEGADO", Style.ERROR).shift(LEFT * 2 + DOWN * 1)
 
-        a1 = CurvedArrow(diamond.get_left(), true_box.get_top(), angle=TAU / 8)
-        a2 = CurvedArrow(diamond.get_right(), false_box.get_top(), angle=-TAU / 8)
+        l1 = Line(diamond.get_left(), path_a.get_top(), color=Style.SUCCESS)
+        l2 = Line(diamond.get_right(), path_b.get_top(), color=Style.ERROR)
 
-        self.play(FadeIn(info), Create(diamond), Write(lbl))
-        self.play(Create(a1), Create(a2), FadeIn(true_box), FadeIn(false_box))
+        self.play(FadeIn(expl2), Create(diamond), Write(q_text))
+        self.wait(1)
+        self.play(Create(l1), Create(l2), FadeIn(path_a), FadeIn(path_b))
 
-        # Token elige TRUE
-        dot = Dot(color=Style.SUCCESS).move_to(diamond)
-        self.play(MoveAlongPath(dot, a1), run_time=2)
-        self.wait(2)
-        self.play(FadeOut(diamond, lbl, true_box, false_box, a1, a2, dot, info))
-
-        # --- SWITCH ---
-        info = ExplanationBox("02. SWITCH",
-                              'Compara un valor contra varios\ncasos y envía el flujo directamente\nal destino correcto.')
-
-        center = TechNode("SWITCH", stroke=Style.WARNING).shift(LEFT * 3.5 + UP * 1.5)
-        cases = VGroup(*[TechNode(f"CASE {i}", color=Style.BG) for i in range(1, 4)]).arrange(RIGHT, buff=0.2).shift(
-            LEFT * 3.5 + DOWN * 1.5)
-        lines = VGroup(*[Line(center.get_bottom(), c.get_top(), stroke_opacity=0.5) for c in cases])
-
-        self.play(FadeIn(info), FadeIn(center), Create(lines), FadeIn(cases))
-        dot = Dot(color=Style.WARNING).move_to(center)
-        self.play(dot.animate.move_to(cases[2]), run_time=2)  # Salto al Case 3
-        self.wait(2)
-        self.play(FadeOut(info, center, cases, lines, dot))
-
-    def show_loops(self):
-        # --- WHILE ---
-        info = ExplanationBox("03. BUCLES: WHILE",
-                              'Se ejecuta "mientras" la condición\nsea cierta. Útil cuando no sabes\ncuántas veces repetirás.')
-
-        loop_rect = TechNode("REPETIR", stroke=Style.PURPLE).shift(LEFT * 3.5)
-        arrow_loop = CurvedArrow(loop_rect.get_bottom(), loop_rect.get_top(), angle=-TAU / 1.5,
-                                 color=Style.PURPLE).shift(RIGHT * 1)
-
-        self.play(FadeIn(info), Create(loop_rect), Create(arrow_loop))
-        dot = Dot(color=Style.PURPLE).move_to(loop_rect)
-        for _ in range(3):
-            self.play(Rotate(dot, about_point=loop_rect.get_right(), angle=TAU), run_time=1)
-
-        self.play(FadeOut(info, loop_rect, arrow_loop, dot))
-
-        # --- FOR EACH ---
-        info = ExplanationBox("03. FOR EACH",
-                              "Recorre colecciones elemento por\nelemento. Perfecto para procesar\nlistas o conjuntos de datos.")
-
-        boxes = VGroup(*[Square(side_length=0.5).set_stroke(Style.ACCENT) for _ in range(5)]).arrange(RIGHT,
-                                                                                                      buff=0.2).shift(
-            LEFT * 3.5)
-
-        self.play(FadeIn(info), Create(boxes))
-        dot = Dot(color=Style.SUCCESS)
-        for box in boxes:
-            self.play(dot.animate.move_to(box), run_time=0.5)
-            self.play(box.animate.set_fill(Style.SUCCESS, 0.5), run_time=0.2)
-
-        self.wait(2)
-        self.play(FadeOut(info, boxes, dot))
-
-    def show_nesting_and_outro(self):
-        # --- ANIDAMIENTO ---
-        info = ExplanationBox("04. ANIDAMIENTO",
-                              'Combinar estructuras: un bucle\ndentro de un condicional. ¡Cuidado\ncon la complejidad!')
-
-        outer = RoundedRectangle(width=3, height=2, color=Style.ACCENT).shift(LEFT * 3.5)
-        inner = Circle(radius=0.5, color=Style.WARNING).move_to(outer)
-
-        self.play(FadeIn(info), Create(outer))
-        self.play(Create(inner), run_time=2)
-        self.play(Indicate(inner))
-        self.wait(2)
-        self.play(FadeOut(info, outer, inner))
-
-        # --- OUTRO ---
-        final_txt = Text("LA LÓGICA PERMANECE.", font="Monospace", color=Style.SUCCESS).scale(0.8)
-        triangulo = Triangle().set_stroke(Style.ACCENT, 4).scale(2)
-
-        self.play(Create(triangulo), Write(final_txt))
-        self.play(Flash(triangulo, color=Style.SUCCESS))
+        # Simulación de decisión
+        token = Dot(color=Style.TEXT_MAIN).move_to(diamond)
+        self.play(token.animate.move_to(path_a), run_time=2)  # Elige el camino verde
+        self.play(path_a.animate.scale(1.1).set_stroke(opacity=1), run_time=0.5)
         self.wait(3)
+        self.play(FadeOut(expl2, diamond, q_text, path_a, path_b, l1, l2, token))
+
+        # --- 3. BUCLES: WHILE (0:50 - 1:10) ---
+        expl3 = DetailedExplanation("03. BUCLE WHILE", [
+            "Se utiliza cuando NO sabemos de antemano\ncuántas veces debemos repetir una tarea.",
+            "La estructura 'mientras' reevalúa la condición\nen cada ciclo.",
+            "¡Peligro!: Si la condición nunca es FALSA,\nel programa caerá en un bucle infinito."
+        ])
+
+        bucket = RoundedRectangle(width=2, height=2.5, corner_radius=0.1).shift(LEFT * 3.5)
+        water = Rectangle(width=1.9, height=0.1, fill_color=Style.PURPLE, fill_opacity=0.8).move_to(
+            bucket.get_bottom()).shift(UP * 0.1)
+
+        cond_box = Text("¿ESTÁ VACÍO?", font_size=18, color=Style.PURPLE).next_to(bucket, UP)
+
+        self.play(FadeIn(expl3), Create(bucket), Create(water), Write(cond_box))
+
+        # Animación de llenado (mientras no esté lleno)
+        for i in range(1, 6):
+            self.play(water.animate.stretch_to_fit_height(0.4 * i).move_to(bucket.get_bottom()).shift(UP * (0.2 * i)),
+                      run_time=0.6)
+            self.play(Indicate(cond_box))
+
+        self.wait(2)
+        self.play(FadeOut(expl3, bucket, water, cond_box))
+
+        # --- 4. BUCLES: FOR EACH (1:25 - 1:40) ---
+        expl4 = DetailedExplanation("04. FOR EACH", [
+            "Especializado en recorrer 'colecciones'.",
+            "Procesa automáticamente cada ítem de una\nlista de principio a fin.",
+            "Es más seguro y legible porque evita errores\nen el manejo de índices manuales."
+        ])
+
+        items = VGroup(*[Circle(radius=0.3, color=Style.ACCENT) for _ in range(5)]).arrange(RIGHT, buff=0.4).shift(
+            LEFT * 3.5)
+        scanner = Square(side_length=0.8, color=Style.SUCCESS).move_to(items[0])
+
+        self.play(FadeIn(expl4), Create(items))
+        self.play(Create(scanner))
+
+        for item in items:
+            self.play(scanner.animate.move_to(item), run_time=0.5)
+            self.play(item.animate.set_fill(Style.SUCCESS, opacity=0.8), run_time=0.3)
+
+        self.wait(2)
+        self.play(FadeOut(expl4, items, scanner))
+
+        # --- 5. ANIDAMIENTO (1:40 - 1:55) ---
+        expl5 = DetailedExplanation("05. ANIDAMIENTO", [
+            "Es la técnica de colocar una estructura\ndentro de otra para resolver problemas complejos.",
+            "Ejemplo: Un bucle que recorre una lista,\ny un condicional que filtra ciertos elementos.",
+            "Regla de oro: No anides más de 3 niveles\nsi quieres mantener tu código legible."
+        ])
+
+        outer_box = Rectangle(width=4, height=3, color=Style.ORANGE, stroke_width=4).shift(LEFT * 3.5)
+        inner_circle = Circle(radius=0.7, color=Style.PURPLE).move_to(outer_box)
+        inner_txt = Text("LOOP", font_size=14).move_to(inner_circle)
+        outer_txt = Text("IF", font_size=14).next_to(outer_box, UP, buff=-0.3)
+
+        self.play(FadeIn(expl5), Create(outer_box), Write(outer_txt))
+        self.play(Create(inner_circle), Write(inner_txt), run_time=1.5)
+
+        # Efecto de rotación para mostrar actividad
+        self.play(Rotate(inner_circle, angle=TAU), run_time=2)
+        self.wait(2)
+        self.play(FadeOut(expl5, outer_box, inner_circle, inner_txt, outer_txt))
+
+        # --- 6. CIERRE (1:55 - 2:05) ---
+        final_logo = Text("LOGIC_DECODER", font="Monospace", color=Style.ACCENT).scale(1.2)
+        final_msg = Text("La sintaxis cambia, la lógica permanece.", font_size=22, color=Style.TEXT_DESC)
+        VGroup(final_logo, final_msg).arrange(DOWN, buff=0.5)
+
+        self.play(Write(final_logo))
+        self.play(FadeIn(final_msg, shift=UP))
+        self.play(Flash(final_logo, color=Style.SUCCESS, line_length=0.5))
+        self.wait(4)
